@@ -1,0 +1,26 @@
+From 4ef73323f04ba4ab573a406af197db75ca548fb8 Mon Sep 17 00:00:00 2001
+From: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+Date: Fri, 9 Nov 2018 13:28:45 +0100
+Subject: [PATCH 5/5] Optimize for size in TF_LDFLAGS
+
+Signed-off-by: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 0dc50244..d9ebf817 100644
+--- a/Makefile
++++ b/Makefile
+@@ -167,7 +167,7 @@ ifeq ($(PIE_FOUND),1)
+ TF_CFLAGS		+=	-fno-PIE
+ endif
+ 
+-TF_LDFLAGS		+=	-Wl,--fatal-warnings -O1 -nostdlib -flto
++TF_LDFLAGS		+=	-Wl,--fatal-warnings -Os -nostdlib -flto
+ TF_LDFLAGS		+=	-Wl,--gc-sections -Wl,--build-id=none
+ TF_LDFLAGS		+=	$(TF_LDFLAGS_$(ARCH))
+ 
+-- 
+2.23.0
+

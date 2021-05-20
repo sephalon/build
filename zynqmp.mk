@@ -5,6 +5,20 @@ BSP_PATH		?= ./xilinx-${PLATFORM}-v$(PETALINUX_VER)-final.bsp
 PRJ_PATH		?= $(ROOT)/$(PLATFORM)-$(PETALINUX_VER)
 PETALINUX_CFG_PATH	?= $(ROOT)/build/zynqmp
 OPTEE_VER		?= latest
+OPTEE_WITH_PAGER	?= n
+
+OPTEE_PAGER = $(PRJ_PATH)/images/linux/tee-pager_v2.bin
+OPTEE_PAGEABLE = $(PRJ_PATH)/images/linux/tee-pageable_v2.bin
+
+OPTEE_PAGER_LOAD_ADDR = 0xFFE00000
+OPTEE_PAGEABLE_LOAD_ADDR = 0x60000000
+
+ifeq ($(OPTEE_WITH_PAGER),y)
+BOOT_ARG_OPTEE += --add $(OPTEE_PAGER) --file-attribute "load=$(OPTEE_PAGER_LOAD_ADDR), startup=$(OPTEE_PAGER_LOAD_ADDR), exception_level=el-1, trustzone"
+BOOT_ARG_OPTEE += --add $(OPTEE_PAGEABLE) --file-attribute "load=$(OPTEE_PAGEABLE_LOAD_ADDR), exception_level=el-1, trustzone"
+else
+BOOT_ARG_OPTEE += --add $(PRJ_PATH)/images/linux/tee.elf --file-attribute "exception_level=el-1, trustzone"
+endif
 
 define set_cfg
 	@sed -i 's/$(1)=.*/$(1)=$(2)/' $(3)
@@ -18,6 +32,10 @@ define set_optee_version
 		echo 'OPTEE_VERSION ?= "latest"' > $(2); \
 		echo 'SRCREV ?= "$${AUTOREV}"' >> $(2); \
 	fi
+endef
+
+define set_optee_paging
+	@echo 'OPTEE_WITH_PAGER ?= "$(1)"' >> $(2);
 endef
 
 ifeq ($(PLATFORM),ultra96-reva)
@@ -41,7 +59,7 @@ endif
 petalinux-create: check-petalinux	
 	@cd $(ROOT) && petalinux-create -n $(PLATFORM)-$(PETALINUX_VER) \
 	    -t project -s $(BSP_PATH)
-	$(call set_cfg,CONFIG_SUBSYSTEM_ATF_COMPILE_EXTRA_SETTINGS,"SPD=opteed ZYNQMP_BL32_MEM_BASE=0x60000000 ZYNQMP_BL32_MEM_SIZE=0x80000",$(PRJ_PATH)/project-spec/configs/config)
+	$(call set_cfg,CONFIG_SUBSYSTEM_ATF_COMPILE_EXTRA_SETTINGS,"SPD=opteed",$(PRJ_PATH)/project-spec/configs/config)
 	$(call set_cfg,CONFIG_SUBSYSTEM_ZYNQMP_ATF_MEM_SIZE,0x16001,$(PRJ_PATH)/project-spec/configs/config)
 	@#
 	@# Replace BSP default rootfs by a minimal one to speed up building 
@@ -60,11 +78,17 @@ petalinux-create: check-petalinux
 	@cp $(PETALINUX_CFG_PATH)/system-user.dtsi \
 	    $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/device-tree/files/
 	@#
-	@# Override default TF-A 1.4 with TF-A 1.5 because it does not work with
-	@# OP-TEE
-	@mkdir -p $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/arm-trusted-firmware/
-	@cp -r $(PETALINUX_CFG_PATH)/arm-trusted-firmware/* \
-	    $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/arm-trusted-firmware/
+	@mkdir -p $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/fsbl/files
+	@cat $(PETALINUX_CFG_PATH)/fsbl/fsbl_%.bbappend >> \
+	    $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/fsbl/fsbl_%.bbappend
+	@cp -r $(PETALINUX_CFG_PATH)/fsbl/*.patch \
+	    $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/fsbl/files
+	@#
+	@mkdir -p $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/arm-trusted-firmware/files
+	@cat $(PETALINUX_CFG_PATH)/arm-trusted-firmware/arm-trusted-firmware_%.bbappend >> \
+	    $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/arm-trusted-firmware/arm-trusted-firmware_%.bbappend
+	@cp -r $(PETALINUX_CFG_PATH)/arm-trusted-firmware/*.patch \
+	    $(PRJ_PATH)/project-spec/meta-user/recipes-bsp/arm-trusted-firmware/files
 	@#
 	@petalinux-create -p $(PRJ_PATH) -t apps --template install \
 	    -n optee-client --enable
@@ -85,6 +109,7 @@ petalinux-config: check-petalinux
 	$(call set_optee_version,$(OPTEE_VER),$(PRJ_PATH)/project-spec/meta-user/recipes-apps/optee-test/optee-test.bbappend)
 	$(call set_optee_version,$(OPTEE_VER),$(PRJ_PATH)/project-spec/meta-user/recipes-apps/optee-client/optee-client.bbappend)
 	$(call set_optee_version,$(OPTEE_VER),$(PRJ_PATH)/project-spec/meta-user/recipes-bsp/optee-os/optee-os.bbappend)
+	$(call set_optee_paging,$(OPTEE_WITH_PAGER),$(PRJ_PATH)/project-spec/meta-user/recipes-bsp/optee-os/optee-os.bbappend)
 	@petalinux-config -p $(PRJ_PATH) --oldconfig
 
 petalinux-build: check-petalinux
@@ -97,5 +122,4 @@ qemu: check-petalinux
 
 petalinux-package: check-petalinux
 	@cd $(PRJ_PATH) && petalinux-package --boot --pmufw --fpga --u-boot \
-	    --add ${PRJ_PATH}/images/linux/bl32.elf --cpu a53-0 \
-	    --file-attribute "exception_level=el-1, trustzone" --force
+	    $(BOOT_ARG_TEE) --force

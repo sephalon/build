@@ -1,6 +1,8 @@
 OPTEE_VERSION ??= "latest"
 SRCREV ??= "${AUTOREV}"
+OPTEE_WITH_PAGER ??= "n"
 BRANCH ??= "master"
+BRANCH = "3.5.0-paging"
 
 DESCRIPTION = "OP-TEE OS"
 
@@ -23,6 +25,7 @@ S = "${WORKDIR}/git"
 PV = "${OPTEE_VERSION}+git${SRCPV}"
 
 REPO ??= "git://github.com/OP-TEE/optee_os.git;protocol=https"
+REPO = "git://${TOPDIR}/../../../optee_os"
 SRC_URI = "${REPO};branch=${BRANCH}"
 
 inherit deploy python3native
@@ -57,6 +60,7 @@ EXTRA_OEMAKE_append = " PLATFORM=${PLATFORM}-${FLAVOR}"
 EXTRA_OEMAKE_append = " CFG_ARM64_core=y"
 EXTRA_OEMAKE_append = " CFG_ARM32_core=n"
 EXTRA_OEMAKE_append = " CFG_USER_TA_TARGETS=ta_arm64"
+EXTRA_OEMAKE_append = " CFG_WITH_PAGER=${OPTEE_WITH_PAGER}"
 EXTRA_OEMAKE_append = " CFG_TEE_CORE_LOG_LEVEL=${TEE_LOG_LEVEL}"
 EXTRA_OEMAKE_append = " CFG_TEE_CORE_DEBUG=${TEE_CORE_DEBUG}"
 EXTRA_OEMAKE_append = " DEBUG=${DEBUG}"
@@ -67,11 +71,11 @@ do_install() {
 }
 
 do_deploy() {
-	install -d ${DEPLOYDIR}
+	install -d ${DEPLOYDIR}/${OPTEE_BASE_NAME}/
 	install -d ${TMPDIR}/../../images/linux/
-	install -m 0644 ${OUTPUT_DIR}/core/tee.elf ${DEPLOYDIR}/${OPTEE_BASE_NAME}.elf
-	install -m 0644 ${OUTPUT_DIR}/core/tee.elf ${TMPDIR}/../../images/linux/bl32.elf
-	install -m 0644 ${OUTPUT_DIR}/core/tee.bin ${DEPLOYDIR}/${OPTEE_BASE_NAME}.bin
-	install -m 0644 ${OUTPUT_DIR}/core/tee.bin ${TMPDIR}/../../images/linux/bl32.bin
+	install -m 0644 ${OUTPUT_DIR}/core/*.elf ${DEPLOYDIR}/${OPTEE_BASE_NAME}/
+	install -m 0644 ${OUTPUT_DIR}/core/*.elf ${TMPDIR}/../../images/linux/
+	install -m 0644 ${OUTPUT_DIR}/core/*.bin ${DEPLOYDIR}/${OPTEE_BASE_NAME}/
+	install -m 0644 ${OUTPUT_DIR}/core/*.bin ${TMPDIR}/../../images/linux/
 }
 addtask deploy before do_build after do_install

@@ -1,0 +1,43 @@
+From 624aa0165617a82ac7ae243bc89f0913d645cc03 Mon Sep 17 00:00:00 2001
+From: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+Date: Tue, 29 May 2018 11:26:47 +0200
+Subject: [PATCH 3/5] Use correct version of xlat table library header
+
+Differing implementations of mmap_region_t cause warnings when link-time
+optimization is being activated.
+
+Signed-off-by: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+---
+ lib/xlat_tables/xlat_tables_common.c       | 2 +-
+ plat/xilinx/zynqmp/aarch64/zynqmp_common.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/xlat_tables/xlat_tables_common.c b/lib/xlat_tables/xlat_tables_common.c
+index c6fa10ee..7676d37b 100644
+--- a/lib/xlat_tables/xlat_tables_common.c
++++ b/lib/xlat_tables/xlat_tables_common.c
+@@ -14,7 +14,7 @@
+ #include <string.h>
+ #include <types.h>
+ #include <utils.h>
+-#include <xlat_tables.h>
++#include <arm_xlat_tables.h>
+ #include "xlat_tables_private.h"
+ 
+ #if LOG_LEVEL >= LOG_LEVEL_VERBOSE
+diff --git a/plat/xilinx/zynqmp/aarch64/zynqmp_common.c b/plat/xilinx/zynqmp/aarch64/zynqmp_common.c
+index 99282b16..498cac79 100644
+--- a/plat/xilinx/zynqmp/aarch64/zynqmp_common.c
++++ b/plat/xilinx/zynqmp/aarch64/zynqmp_common.c
+@@ -10,7 +10,7 @@
+ #include <platform.h>
+ #include <stdbool.h>
+ #include <string.h>
+-#include <xlat_tables.h>
++#include <arm_xlat_tables.h>
+ #include "../zynqmp_private.h"
+ #include "pm_api_sys.h"
+ 
+-- 
+2.23.0
+

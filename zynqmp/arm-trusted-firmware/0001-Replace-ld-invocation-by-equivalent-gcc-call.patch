@@ -1,0 +1,44 @@
+From 0258b4e3998ce8c11e6babdb0b496772d1f06a28 Mon Sep 17 00:00:00 2001
+From: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+Date: Tue, 29 May 2018 10:37:07 +0200
+Subject: [PATCH 1/5] Replace ld invocation by equivalent gcc call
+
+Signed-off-by: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+---
+ Makefile                     | 4 ++--
+ make_helpers/build_macros.mk | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 1cd6b62c..04381b7a 100644
+--- a/Makefile
++++ b/Makefile
+@@ -167,8 +167,8 @@ ifeq ($(PIE_FOUND),1)
+ TF_CFLAGS		+=	-fno-PIE
+ endif
+ 
+-TF_LDFLAGS		+=	--fatal-warnings -O1
+-TF_LDFLAGS		+=	--gc-sections
++TF_LDFLAGS		+=	-Wl,--fatal-warnings -O1 -nostdlib
++TF_LDFLAGS		+=	-Wl,--gc-sections -Wl,--build-id=none
+ TF_LDFLAGS		+=	$(TF_LDFLAGS_$(ARCH))
+ 
+ DTC_FLAGS		+=	-I dts -O dtb
+diff --git a/make_helpers/build_macros.mk b/make_helpers/build_macros.mk
+index a4fbc5ac..57d9069b 100644
+--- a/make_helpers/build_macros.mk
++++ b/make_helpers/build_macros.mk
+@@ -315,8 +315,8 @@ else
+ 	       const char version_string[] = "${VERSION_STRING}";' | \
+ 		$$(CC) $$(TF_CFLAGS) $$(CFLAGS) -xc -c - -o $(BUILD_DIR)/build_message.o
+ endif
+-	$$(Q)$$(LD) -o $$@ $$(TF_LDFLAGS) $$(LDFLAGS) -Map=$(MAPFILE) \
+-		--script $(LINKERFILE) $(BUILD_DIR)/build_message.o $(OBJS) $(LDLIBS)
++	$$(Q)$$(CC) -o $$@ $$(TF_LDFLAGS) $$(LDFLAGS) -Wl,-Map=$(MAPFILE) \
++		-T $(LINKERFILE) $(BUILD_DIR)/build_message.o $(OBJS) $(LDLIBS)
+ 
+ $(DUMP): $(ELF)
+ 	@echo "  OD      $$@"
+-- 
+2.23.0
+

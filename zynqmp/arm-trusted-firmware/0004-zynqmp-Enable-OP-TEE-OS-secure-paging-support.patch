@@ -1,0 +1,145 @@
+From 210db1ce66a3e0af3b14549089b3ad0197c45296 Mon Sep 17 00:00:00 2001
+From: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+Date: Tue, 7 Aug 2018 16:03:30 +0200
+Subject: [PATCH 4/5] zynqmp: Enable OP-TEE OS secure paging support
+
+For OP-TEE OS secure paging support, the FSBL needs to provide the pageable
+area load address to the ATF, but designate it as non-executable. Therefore the
+FSBL provides the load address in addition to the execution address; an
+execution address of 0 then designates the OP-TEE OS pageable area.
+
+Signed-off-by: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+---
+ plat/xilinx/zynqmp/plat_startup.c | 86 +++++++++++++++++--------------
+ 1 file changed, 48 insertions(+), 38 deletions(-)
+
+diff --git a/plat/xilinx/zynqmp/plat_startup.c b/plat/xilinx/zynqmp/plat_startup.c
+index 758a742c..7a2438e1 100644
+--- a/plat/xilinx/zynqmp/plat_startup.c
++++ b/plat/xilinx/zynqmp/plat_startup.c
+@@ -57,6 +57,7 @@
+ struct xfsbl_partition {
+ 	uint64_t entry_point;
+ 	uint64_t flags;
++	uint64_t load_address;
+ };
+ 
+ /* Structure for handoff parameters to ARM Trusted Firmware (ATF) */
+@@ -156,6 +157,7 @@ enum fsbl_handoff fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t
+ {
+ 	uint64_t atf_handoff_addr;
+ 	const struct xfsbl_atf_handoff_params *ATFHandoffParams;
++	uint64_t optee_pageable_load_addr = 0;
+ 
+ 	atf_handoff_addr = mmio_read_32(PMU_GLOBAL_GEN_STORAGE6);
+ 	assert((atf_handoff_addr < BL31_BASE) ||
+@@ -193,9 +195,10 @@ enum fsbl_handoff fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t
+ 		int target_estate, target_secure;
+ 		int target_cpu, target_endianness, target_el;
+ 
+-		VERBOSE("BL31: %zd: entry:0x%lx, flags:0x%lx\n", i,
++		VERBOSE("BL31: %zd: entry:0x%lx, flags:0x%lx, load address:0x%lx\n", i,
+ 			ATFHandoffParams->partition[i].entry_point,
+-			ATFHandoffParams->partition[i].flags);
++			ATFHandoffParams->partition[i].flags,
++			ATFHandoffParams->partition[i].load_address);
+ 
+ 		target_cpu = get_fsbl_cpu(&ATFHandoffParams->partition[i]);
+ 		if (target_cpu != FSBL_FLAGS_A53_0) {
+@@ -221,50 +224,57 @@ enum fsbl_handoff fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t
+ 		target_estate = get_fsbl_estate(&ATFHandoffParams->partition[i]);
+ 		target_endianness = get_fsbl_endian(&ATFHandoffParams->partition[i]);
+ 
+-		if (target_secure == FSBL_FLAGS_SECURE) {
+-			image = bl32;
++		if (ATFHandoffParams->partition[i].entry_point != 0U) {
++			if (target_secure == FSBL_FLAGS_SECURE) {
++				image = bl32;
+ 
+-			if (target_estate == FSBL_FLAGS_ESTATE_A32)
+-				bl32->spsr = SPSR_MODE32(MODE32_svc, SPSR_T_ARM,
+-							 target_endianness,
+-							 DISABLE_ALL_EXCEPTIONS);
+-			else
+-				bl32->spsr = SPSR_64(MODE_EL1, MODE_SP_ELX,
+-						     DISABLE_ALL_EXCEPTIONS);
+-		} else {
+-			image = bl33;
+-
+-			if (target_estate == FSBL_FLAGS_ESTATE_A32) {
+-				if (target_el == FSBL_FLAGS_EL2)
+-					target_el = MODE32_hyp;
++				if (target_estate == FSBL_FLAGS_ESTATE_A32)
++					bl32->spsr = SPSR_MODE32(MODE32_svc, SPSR_T_ARM,
++								 target_endianness,
++								 DISABLE_ALL_EXCEPTIONS);
+ 				else
+-					target_el = MODE32_sys;
++					bl32->spsr = SPSR_64(MODE_EL1, MODE_SP_ELX,
++							     DISABLE_ALL_EXCEPTIONS);
+ 
+-				bl33->spsr = SPSR_MODE32(target_el, SPSR_T_ARM,
+-							 target_endianness,
+-							 DISABLE_ALL_EXCEPTIONS);
+ 			} else {
+-				if (target_el == FSBL_FLAGS_EL2)
+-					target_el = MODE_EL2;
+-				else
+-					target_el = MODE_EL1;
+-
+-				bl33->spsr = SPSR_64(target_el, MODE_SP_ELX,
+-						     DISABLE_ALL_EXCEPTIONS);
++				image = bl33;
++
++				if (target_estate == FSBL_FLAGS_ESTATE_A32) {
++					if (target_el == FSBL_FLAGS_EL2)
++						target_el = MODE32_hyp;
++					else
++						target_el = MODE32_sys;
++
++					bl33->spsr = SPSR_MODE32(target_el, SPSR_T_ARM,
++								 target_endianness,
++								 DISABLE_ALL_EXCEPTIONS);
++				} else {
++					if (target_el == FSBL_FLAGS_EL2)
++						target_el = MODE_EL2;
++					else
++						target_el = MODE_EL1;
++
++					bl33->spsr = SPSR_64(target_el, MODE_SP_ELX,
++							     DISABLE_ALL_EXCEPTIONS);
++				}
+ 			}
+-		}
+ 
+-		VERBOSE("Setting up %s entry point to:%lx, el:%x\n",
+-			target_secure == FSBL_FLAGS_SECURE ? "BL32" : "BL33",
+-			ATFHandoffParams->partition[i].entry_point,
+-			target_el);
+-		image->pc = ATFHandoffParams->partition[i].entry_point;
++			VERBOSE("Setting up %s entry point to:%lx, el:%x\n",
++				target_secure == FSBL_FLAGS_SECURE ? "BL32" : "BL33",
++				ATFHandoffParams->partition[i].entry_point,
++				target_el);
++			image->pc = ATFHandoffParams->partition[i].entry_point;
+ 
+-		if (target_endianness == SPSR_E_BIG)
+-			EP_SET_EE(image->h.attr, EP_EE_BIG);
+-		else
+-			EP_SET_EE(image->h.attr, EP_EE_LITTLE);
++			if (target_endianness == SPSR_E_BIG)
++				EP_SET_EE(image->h.attr, EP_EE_BIG);
++			else
++				EP_SET_EE(image->h.attr, EP_EE_LITTLE);
++		} else {
++			optee_pageable_load_addr = ATFHandoffParams->partition[i].load_address;
++		}
+ 	}
+ 
++	bl32->args.arg1 = optee_pageable_load_addr;
++
+ 	return FSBL_HANDOFF_SUCCESS;
+ }
+-- 
+2.23.0
+

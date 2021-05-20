@@ -1,0 +1,134 @@
+From 3680a663abc6daf747760a982a8587d31323ad14 Mon Sep 17 00:00:00 2001
+From: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+Date: Fri, 3 Aug 2018 12:28:55 +0200
+Subject: [PATCH 2/2] sw_apps: zynqmp_fsbl: Enable A53 high TCM address load
+
+To enable loading OP-TEE into TCM and handing off the right address and CPU to
+ATF, we need to use the TCM high address and not RPU-relative addresses
+starting with 0. In addition we add an option to exclude RPU reset after TCM
+ECC has been initiated.
+
+Signed-off-by: Stefan Wiehler <stefan.wiehler@missinglinkelectronics.com>
+---
+ lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h         |  7 +++++++
+ lib/sw_apps/zynqmp_fsbl/src/xfsbl_hw.h             |  5 +++++
+ lib/sw_apps/zynqmp_fsbl/src/xfsbl_image_header.c   | 12 ++++++++++++
+ lib/sw_apps/zynqmp_fsbl/src/xfsbl_initialization.c |  2 ++
+ lib/sw_apps/zynqmp_fsbl/src/xfsbl_partition_load.c | 10 ++++++++++
+ 5 files changed, 36 insertions(+)
+
+diff --git a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h
+index 134bf839d..bb1ed2b2b 100644
+--- a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h
++++ b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h
+@@ -131,6 +131,8 @@ extern "C" {
+  *     - FSBL_WDT_EXCLUDE WDT code will be excluded
+  *     - FSBL_PERF_EXCLUDE_VAL Performance prints are excluded
+  *     - FSBL_A53_TCM_ECC_EXCLUDE_VAL TCM ECC Init will be excluded for A53
++ *     - FSBL_A53_TCM_ECC_RPU_RESET_EXCLUDE_VAL RPU reset after TCM ECC Init
++ *     			for A53 will be excluded
+  *     - FSBL_PL_CLEAR_EXCLUDE_VAL PL clear will be excluded unless boot.bin
+  *     	 contains bitstream
+  *     - FSBL_FORCE_ENC_EXCLUDE_VAL Forcing encryption for every partition
+@@ -146,6 +148,7 @@ extern "C" {
+ #define FSBL_WDT_EXCLUDE_VAL			(0U)
+ #define FSBL_PERF_EXCLUDE_VAL			(1U)
+ #define FSBL_A53_TCM_ECC_EXCLUDE_VAL	(1U)
++#define FSBL_A53_TCM_ECC_RPU_RESET_EXCLUDE_VAL	(0U)
+ #define FSBL_PL_CLEAR_EXCLUDE_VAL		(1U)
+ #define FSBL_USB_EXCLUDE_VAL			(1U)
+ #define FSBL_PROT_BYPASS_EXCLUDE_VAL	(1U)
+@@ -192,6 +195,10 @@ extern "C" {
+ #define FSBL_A53_TCM_ECC_EXCLUDE
+ #endif
+ 
++#if FSBL_A53_TCM_ECC_RPU_RESET_EXCLUDE_VAL
++#define FSBL_A53_TCM_ECC_RPU_RESET_EXCLUDE
++#endif
++
+ #if FSBL_PL_CLEAR_EXCLUDE_VAL
+ #define FSBL_PL_CLEAR_EXCLUDE
+ #endif
+diff --git a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hw.h b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hw.h
+index da621e0a5..6a1a4324e 100644
+--- a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hw.h
++++ b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_hw.h
+@@ -876,6 +876,11 @@ extern "C" {
+ #define XFSBL_A53_TCM_ECC
+ #endif
+ 
++/* Definition for RPU Reset after TCM ECC Init for A53 to be included */
++#if !defined(FSBL_A53_TCM_ECC_RPU_RESET_EXCLUDE)
++#define XFSBL_A53_TCM_ECC_RPU_RESET
++#endif
++
+ /* Definition for PL clear include irrespective of boot image has bitstream or not */
+ #if !defined(FSBL_PL_CLEAR_EXCLUDE)
+ #define XFSBL_PL_CLEAR
+diff --git a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_image_header.c b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_image_header.c
+index f9903761e..eb4a200d9 100644
+--- a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_image_header.c
++++ b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_image_header.c
+@@ -491,6 +491,18 @@ static u32 XFsbl_CheckValidMemoryAddress(u64 Address, u32 CpuId, u32 DevId)
+ 		}
+ 	}
+ 
++	/* Check if Address is in the range of higher TCM for A53 */
++	if (CpuId == XIH_PH_ATTRB_DEST_CPU_A53_0)
++	{
++		if ((Address >= XFSBL_R50_HIGH_ATCM_START_ADDRESS) &&
++			(Address < (XFSBL_R50_HIGH_ATCM_START_ADDRESS +
++				(XFSBL_R5_TCM_BANK_LENGTH * 4U))))
++		{
++			Status = XFSBL_SUCCESS;
++			goto END;
++		}
++	}
++
+ 	/* Check if Address is in the range of TCM for R5_0/R5_1 */
+ 	if ((CpuId == XIH_PH_ATTRB_DEST_CPU_R5_0) ||
+ 		(CpuId == XIH_PH_ATTRB_DEST_CPU_R5_1) )
+diff --git a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_initialization.c b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_initialization.c
+index 9dec5e401..378b69eeb 100644
+--- a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_initialization.c
++++ b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_initialization.c
+@@ -1779,6 +1779,7 @@ static u32 XFsbl_TcmInit(XFsblPs * FsblInstancePtr)
+ 		goto END;
+ 	}
+ 
++#ifdef XFSBL_A53_TCM_ECC_RPU_RESET
+ 	/* Place the RPU back in reset, to let user power it up when required */
+ 	if (FsblInstancePtr->ProcessorID == XIH_PH_ATTRB_DEST_CPU_A53_0) {
+ 		RegValue = XFsbl_In32(CRL_APB_RST_LPD_TOP);
+@@ -1787,6 +1788,7 @@ static u32 XFsbl_TcmInit(XFsblPs * FsblInstancePtr)
+ 				CRL_APB_RST_LPD_TOP_RPU_AMBA_RESET_MASK);
+ 		XFsbl_Out32(CRL_APB_RST_LPD_TOP, RegValue);
+ 	}
++#endif
+ 
+ END:
+ 	return Status;
+diff --git a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_partition_load.c b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_partition_load.c
+index 4872e001d..55c0e9426 100644
+--- a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_partition_load.c
++++ b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_partition_load.c
+@@ -580,6 +580,16 @@ static u32 XFsbl_GetLoadAddress(u32 DestinationCpu, PTRSIZE * LoadAddressPtr, u3
+ 
+ 	Address = *LoadAddressPtr;
+ 
++	/* Keep high TCM load address for A53 */
++	if ((DestinationCpu == XIH_PH_ATTRB_DEST_CPU_A53_0) &&
++			((Address >= XFSBL_R50_HIGH_ATCM_START_ADDRESS) &&
++					(Address < (XFSBL_R50_HIGH_ATCM_START_ADDRESS +
++						(XFSBL_R5_TCM_BANK_LENGTH * 4U)))))
++	{
++		Status = XFSBL_SUCCESS;
++		goto END;
++	}
++
+ 	/* Update for R50 TCM address if the partition fits with in a TCM bank */
+ 	if ((DestinationCpu == XIH_PH_ATTRB_DEST_CPU_R5_0) &&
+ 			((Address < (XFSBL_R5_TCM_START_ADDRESS + XFSBL_R5_TCM_BANK_LENGTH))||
+-- 
+2.23.0
+

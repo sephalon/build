@@ -1,0 +1,15 @@
+diff --git a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h
+index acccd4e..03fc3a5 100644
+--- a/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h
++++ b/lib/sw_apps/zynqmp_fsbl/src/xfsbl_config.h
+@@ -143,8 +143,8 @@ extern "C" {
+ #define FSBL_EARLY_HANDOFF_EXCLUDE_VAL	(1U)
+ #define FSBL_WDT_EXCLUDE_VAL			(0U)
+ #define FSBL_PERF_EXCLUDE_VAL			(1U)
+-#define FSBL_A53_TCM_ECC_EXCLUDE_VAL	(1U)
+-#define FSBL_A53_TCM_ECC_RPU_RESET_EXCLUDE_VAL	(0U)
++#define FSBL_A53_TCM_ECC_EXCLUDE_VAL	(0U)
++#define FSBL_A53_TCM_ECC_RPU_RESET_EXCLUDE_VAL	(1U)
+ #define FSBL_PL_CLEAR_EXCLUDE_VAL		(1U)
+ #define FSBL_USB_EXCLUDE_VAL			(1U)
+ #define FSBL_PROT_BYPASS_EXCLUDE_VAL	(1U)
